@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+.venv-*/
+venv/
+
+# Generated artefacts (figures, run records, logs)
+outputs/
+autoresearch/ledger/
+a3/ledger_*.jsonl
+a3/*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

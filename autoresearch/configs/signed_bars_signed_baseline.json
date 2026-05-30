@@ -1,0 +1,14 @@
+{
+  "config": {
+    "experiment": "signed_bars_signed",
+    "tau": 1.0,
+    "lam": 4.0,
+    "eta0": 0.05,
+    "sigma": 0.0,
+    "n_outputs": 16,
+    "weight_init": 0.001,
+    "n_steps": 100000,
+    "seeds": [0, 1, 2, 3, 4]
+  },
+  "result": null
+}

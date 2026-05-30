@@ -1,0 +1,29 @@
+{
+  "config": {
+    "experiment": "synth",
+    "tau": 1.0,
+    "lam": 4.0,
+    "eta0": 0.05,
+    "sigma": 0.1,
+    "n_outputs": 64,
+    "weight_init": 0.001,
+    "n_steps": 300,
+    "seeds": [
+      0
+    ],
+    "d": 32,
+    "n_features": 48,
+    "batch_size": 128,
+    "noise_mode": "uniform",
+    "correlation": 0.0,
+    "n_groups": 16,
+    "hierarchy": false,
+    "branching": 4
+  },
+  "result": {
+    "primary_score": 0.6392930628246224,
+    "seed_pass_fraction": 0.0,
+    "n_steps": 300,
+    "margin": 0.6392930628246224
+  }
+}

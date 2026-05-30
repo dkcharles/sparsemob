@@ -1,0 +1,19 @@
+# Optional GPU extra: only needed to reproduce the benchmark-scale experiments in a3/
+# (the negative-feedback coder at d=768 / 16,384 features on a CUDA GPU). The core
+# nfnet package, the autoresearch harness, and their tests are pure NumPy and CPU-only;
+# nothing outside a3/ imports torch.
+#
+# Install into an isolated venv so the heavy GPU stack never touches the core:
+#
+#   uv venv .venv-gpu --python 3.12
+#   uv pip install --python .venv-gpu --torch-backend=auto torch
+#   uv pip install --python .venv-gpu -r requirements-gpu.txt
+#
+# (--torch-backend=auto resolves the correct CUDA wheel for the local GPU/driver.)
+# Verified on: NVIDIA RTX 3090 (24 GB, sm_86), torch 2.12.0+cu130, Python 3.12.
+
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.6
+pytest>=7.0
+# torch: installed separately via `uv pip install --torch-backend=auto torch`
