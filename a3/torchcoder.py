@@ -144,11 +144,12 @@ class TorchNegativeFeedbackCoder:
     """Minibatched negative-feedback coder on a torch device (CPU or CUDA)."""
 
     def __init__(self, n_inputs: int, n_outputs: int, nonlinearity=None,
-                 noise=None, weight_init: float = 1e-2, device: str = "cpu",
-                 seed: int | None = None):
+                 noise=None, weight_init: float = 1e-2, weight_decay: float = 0.0,
+                 device: str = "cpu", seed: int | None = None):
         self.device = torch.device(device)
         self.f = nonlinearity if nonlinearity is not None else (lambda a: a)
         self.noise = noise
+        self.weight_decay = weight_decay
         g = torch.Generator(device=self.device)
         if seed is not None:
             g.manual_seed(seed)
@@ -166,6 +167,8 @@ class TorchNegativeFeedbackCoder:
             Y = Y + self.noise(Y)
         E = X - Y @ self.W
         self.W += eta * (Y.t() @ E) / X.shape[0]
+        if self.weight_decay:
+            self.W -= eta * self.weight_decay * self.W
         return Y
 
     def train(self, sampler_batch, n_steps: int, batch_size: int, eta0: float = 0.05):

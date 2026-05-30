@@ -51,15 +51,19 @@ def _hinton_panel(ax, vec: np.ndarray, grid_shape, vmax: float):
 
 
 def hinton_figure(W: np.ndarray, grid_shape=(8, 8), title: str | None = None,
-                  n_cols: int | None = None):
-    """Build a matplotlib Figure of Hinton panels, one per output neuron."""
+                  n_cols: int | None = None, panel_size: float = 1.1):
+    """Build a matplotlib Figure of Hinton panels, one per output neuron.
+
+    ``panel_size`` controls inches per panel cell; increase for print-quality output.
+    """
     n_out = W.shape[0]
     if n_cols is None:
         n_cols = int(math.ceil(math.sqrt(n_out)))
     n_rows = int(math.ceil(n_out / n_cols))
     vmax = float(np.abs(W).max()) or 1.0
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 1.1, n_rows * 1.1),
+    fig, axes = plt.subplots(n_rows, n_cols,
+                             figsize=(n_cols * panel_size, n_rows * panel_size),
                              squeeze=False)
     for k in range(n_rows * n_cols):
         ax = axes[k // n_cols][k % n_cols]
@@ -75,9 +79,10 @@ def hinton_figure(W: np.ndarray, grid_shape=(8, 8), title: str | None = None,
 
 
 def save_hinton(W: np.ndarray, path: str, grid_shape=(8, 8), title: str | None = None,
-                n_cols: int | None = None, dpi: int = 120):
+                n_cols: int | None = None, dpi: int = 120, panel_size: float = 1.1):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    fig = hinton_figure(W, grid_shape=grid_shape, title=title, n_cols=n_cols)
+    fig = hinton_figure(W, grid_shape=grid_shape, title=title, n_cols=n_cols,
+                        panel_size=panel_size)
     fig.savefig(path, dpi=dpi)
     plt.close(fig)
     return path

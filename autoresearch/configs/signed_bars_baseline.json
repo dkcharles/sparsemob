@@ -4,11 +4,40 @@
     "tau": 1.0,
     "lam": 4.0,
     "eta0": 0.05,
-    "sigma": 0.0,
-    "n_outputs": 16,
+    "sigma": 0.1,
+    "n_outputs": 48,
     "weight_init": 0.001,
     "n_steps": 100000,
-    "seeds": [0, 1, 2, 3, 4]
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "d": 128,
+    "n_features": 512,
+    "batch_size": 256,
+    "noise_mode": "uniform",
+    "correlation": 0.0,
+    "n_groups": 16,
+    "hierarchy": false,
+    "branching": 4,
+    "width_control": "noise",
+    "weight_decay": 0.0,
+    "act_l1": 0.0,
+    "topk": null,
+    "feedback": true
   },
-  "result": null
+  "result": {
+    "primary_score": 1.6,
+    "seed_pass_fraction": 1.0,
+    "n_steps": 100000,
+    "margin": 1.6
+  }
 }

@@ -61,6 +61,8 @@ class MOBObjective:
             diagnostics={
                 "mean_active": float(np.mean([m["active"] for m in metrics])),
                 "mean_recovered": float(np.mean([m["recovered"] for m in metrics])),
+                "std_active": float(np.std([m["active"] for m in metrics])),
+                "std_recovered": float(np.std([m["recovered"] for m in metrics])),
             },
         )
 

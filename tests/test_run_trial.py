@@ -171,3 +171,10 @@ def test_run_trial_synth_correlation_hierarchy_smoke():
     res = run_trial(cfg)
     assert isinstance(res, ObjectiveResult)
     assert "mean_mcc" in res.diagnostics
+
+
+def test_width_control_l2_runs_and_prunes_on_mob():
+    cfg = TrialConfig(experiment="mob", sigma=0.0, width_control="l2",
+                      weight_decay=0.02, n_outputs=24, n_steps=2000, seeds=[0])
+    res = run_trial(cfg)
+    assert "mean_active" in res.diagnostics

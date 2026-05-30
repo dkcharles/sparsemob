@@ -44,9 +44,15 @@ def run(cfg) -> dict:
             d=cfg.d, n_features=cfg.n_features, correlation=cfg.correlation,
             n_groups=cfg.n_groups, hierarchy=cfg.hierarchy, branching=cfg.branching,
             device=device, seed=seed)
+        if cfg.width_control == "l2":
+            noise = None
+            weight_decay = cfg.weight_decay
+        else:
+            noise = _make_noise(cfg.noise_mode, cfg.sigma)
+            weight_decay = 0.0
         net = TorchNegativeFeedbackCoder(
             cfg.d, cfg.n_outputs, nonlinearity=soft_threshold(cfg.tau, cfg.lam),
-            noise=_make_noise(cfg.noise_mode, cfg.sigma), weight_init=cfg.weight_init,
+            noise=noise, weight_decay=weight_decay, weight_init=cfg.weight_init,
             device=device, seed=seed)
         net.train(data.sample_batch, n_steps=cfg.n_steps, batch_size=cfg.batch_size,
                   eta0=cfg.eta0)
@@ -87,13 +93,20 @@ def main():
     p.add_argument("--batch-size", type=int, default=4096)
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     p.add_argument("--rationale", default="")
+    p.add_argument("--width-control", default="noise", choices=["noise", "l2"],
+                   dest="width_control",
+                   help="Width-control mechanism: noise (default) or l2 weight decay")
+    p.add_argument("--weight-decay", type=float, default=0.0, dest="weight_decay",
+                   help="L2 weight-decay coefficient (used when --width-control=l2)")
     cfg = p.parse_args()
 
     t = time.time()
     result = run(cfg)
     elapsed = time.time() - t
     append_ledger(cfg, result, elapsed)
-    print(f"[{cfg.noise_mode} sigma={cfg.sigma} corr={cfg.correlation}] "
+    mode_tag = (f"l2 wd={cfg.weight_decay}" if cfg.width_control == "l2"
+                else f"{cfg.noise_mode} sigma={cfg.sigma}")
+    print(f"[{mode_tag} corr={cfg.correlation}] "
           f"mcc={result['mean_mcc']:.3f} active={result['mean_active']:.0f} "
           f"recovered={result['mean_recovered']:.0f}  ({elapsed:.0f}s)")
 

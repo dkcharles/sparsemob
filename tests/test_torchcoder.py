@@ -102,6 +102,16 @@ def test_training_runs_and_is_finite():
     assert 0.0 <= res["mcc"] <= 1.0
 
 
+def test_torch_weight_decay_shrinks():
+    import torch
+    from a3.torchcoder import TorchNegativeFeedbackCoder, soft_threshold
+    net = TorchNegativeFeedbackCoder(8, 6, nonlinearity=soft_threshold(1.0, 4.0),
+                                     weight_decay=0.1, device="cpu", seed=0)
+    before = net.W.norm().item()
+    net.train_step(torch.zeros(4, 8), eta=0.1)
+    assert net.W.norm().item() < before
+
+
 def test_runs_on_cuda_if_available():
     if not torch.cuda.is_available():
         return

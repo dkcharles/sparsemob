@@ -43,10 +43,24 @@ class TrialConfig:
     n_groups: int = 16            # synth: number of correlated feature groups
     hierarchy: bool = False       # synth: parent-gated child firing
     branching: int = 4            # synth: hierarchy tree branching factor
+    width_control: str = "noise"  # noise | l2 | l1 | topk
+    weight_decay: float = 0.0     # L2 strength when width_control == "l2"
+    act_l1: float = 0.0           # L1 strength when width_control == "l1"
+    topk: int | None = None       # k when width_control == "topk"
+    feedback: bool = True         # A1b control
 
 
 SIZE = 8
 N_INPUTS = SIZE * SIZE
+
+
+def _net_kwargs(cfg: TrialConfig) -> dict:
+    return dict(
+        weight_decay=cfg.weight_decay if cfg.width_control == "l2" else 0.0,
+        act_l1=cfg.act_l1 if cfg.width_control == "l1" else 0.0,
+        topk=cfg.topk if cfg.width_control == "topk" else None,
+        feedback=cfg.feedback,
+    )
 
 
 def _make_net(cfg: TrialConfig, seed: int, use_noise: bool, nonlinearity) -> NegativeFeedbackNet:
@@ -54,6 +68,7 @@ def _make_net(cfg: TrialConfig, seed: int, use_noise: bool, nonlinearity) -> Neg
         N_INPUTS, n_outputs=cfg.n_outputs, nonlinearity=nonlinearity,
         noise=ns.uniform_gaussian(sigma=cfg.sigma) if use_noise else None,
         weight_init=cfg.weight_init, rng=seed,
+        **_net_kwargs(cfg),
     )
 
 
@@ -67,7 +82,7 @@ def _train(cfg: TrialConfig, data, seed: int, use_noise: bool, nonlinearity) -> 
 def run_trial(cfg: TrialConfig) -> ObjectiveResult:
     # Explicit branches by design (YAGNI at three experiments); refactor to a
     # registry only if the count keeps growing.
-    use_noise = cfg.sigma > 0.0
+    use_noise = cfg.width_control == "noise" and cfg.sigma > 0.0
     soft = nl.soft_threshold(tau=cfg.tau, lam=cfg.lam)
 
     if cfg.experiment == "mob":
@@ -120,6 +135,7 @@ def run_trial(cfg: TrialConfig) -> ObjectiveResult:
             net = NegativeFeedbackNet(
                 cfg.d, n_outputs=cfg.n_outputs, nonlinearity=soft, noise=noise,
                 weight_init=cfg.weight_init, rng=seed,
+                **_net_kwargs(cfg),
             )
             net.train_batched(data.sample_batch, cfg.n_steps, batch_size=cfg.batch_size,
                               eta_schedule=linear_anneal(cfg.eta0), callbacks=callbacks)
@@ -233,6 +249,11 @@ def _cli():
     p.add_argument("--n-groups", type=int, default=16)
     p.add_argument("--hierarchy", action="store_true")
     p.add_argument("--branching", type=int, default=4)
+    p.add_argument("--width-control", default="noise", choices=["noise", "l2", "l1", "topk"])
+    p.add_argument("--weight-decay", type=float, default=0.0)
+    p.add_argument("--act-l1", type=float, default=0.0)
+    p.add_argument("--topk", type=int, default=None)
+    p.add_argument("--no-feedback", dest="feedback", action="store_false", default=True)
     p.add_argument("--rationale", default="(none given)")
     a = p.parse_args()
     cfg = TrialConfig(experiment=a.experiment, tau=a.tau, lam=a.lam, eta0=a.eta0,
@@ -240,7 +261,9 @@ def _cli():
                       n_steps=a.n_steps, seeds=a.seeds,
                       d=a.d, n_features=a.n_features, batch_size=a.batch_size,
                       noise_mode=a.noise_mode, correlation=a.correlation,
-                      n_groups=a.n_groups, hierarchy=a.hierarchy, branching=a.branching)
+                      n_groups=a.n_groups, hierarchy=a.hierarchy, branching=a.branching,
+                      width_control=a.width_control, weight_decay=a.weight_decay,
+                      act_l1=a.act_l1, topk=a.topk, feedback=a.feedback)
     res = run_trial(cfg)
     kept = append_ledger(cfg, res, rationale=a.rationale)
     print(f"score={res.primary_score:.3f} pass_fraction={res.seed_pass_fraction:.2f} "

@@ -30,6 +30,22 @@ def test_mob_aggregate_reports_pass_fraction():
     assert res.primary_score == 0.0
 
 
+def test_mob_aggregate_std_active():
+    """std_active > 0 when seeds differ; == 0 when identical."""
+    obj = MOBObjective(size=8)
+    good = obj.per_seed(_mob_weights(16, 8))   # active=16
+    bad  = obj.per_seed(_mob_weights(8, 16))   # active=8 (8 bars active, 16 dead)
+    # differing active values -> std > 0
+    res = obj.aggregate([good, bad])
+    assert "std_active" in res.diagnostics
+    assert res.diagnostics["std_active"] > 0.0
+    assert "std_recovered" in res.diagnostics
+    # identical values -> std == 0
+    res2 = obj.aggregate([good, good, good])
+    assert res2.diagnostics["std_active"] == 0.0
+    assert res2.diagnostics["std_recovered"] == 0.0
+
+
 def test_signed_objective_full_recovery_passes():
     from nfnet.data import SignedBarsData
     from autoresearch.objectives import SignedBarsObjective

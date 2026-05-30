@@ -45,6 +45,10 @@ class NegativeFeedbackNet:
         noise: NoiseInjector | None = None,
         nonneg_weights: bool = False,
         weight_init: float = 1e-3,
+        weight_decay: float = 0.0,
+        act_l1: float = 0.0,
+        topk: int | None = None,
+        feedback: bool = True,
         rng: np.random.Generator | int | None = None,
     ):
         self.n_inputs = n_inputs
@@ -52,6 +56,10 @@ class NegativeFeedbackNet:
         self.f = nonlinearity
         self.noise = noise
         self.nonneg_weights = nonneg_weights
+        self.weight_decay = weight_decay
+        self.act_l1 = act_l1
+        self.topk = topk
+        self.feedback = feedback
         self.rng = np.random.default_rng(rng)
 
         # Small random initial weights, ~1e-3 (thesis). Non-negative networks
@@ -60,6 +68,17 @@ class NegativeFeedbackNet:
             self.W = self.rng.uniform(0.0, weight_init, size=(n_outputs, n_inputs))
         else:
             self.W = self.rng.uniform(-weight_init, weight_init, size=(n_outputs, n_inputs))
+
+    def _apply_selection(self, Y: np.ndarray) -> np.ndarray:
+        """Apply activation-L1 prox and/or top-k selection to a (B, M) output block."""
+        if self.act_l1:
+            Y = np.sign(Y) * np.maximum(np.abs(Y) - self.act_l1, 0.0)
+        if self.topk is not None and self.topk < self.n_outputs:
+            keep = np.argsort(np.abs(Y), axis=1)[:, -self.topk:]
+            mask = np.zeros_like(Y, dtype=bool)
+            np.put_along_axis(mask, keep, True, axis=1)
+            Y = np.where(mask, Y, 0.0)
+        return Y
 
     def forward(self, x: np.ndarray, add_noise: bool = False, step: int = 0):
         """Return (a, y). Set ``add_noise`` to include output noise."""
@@ -74,8 +93,11 @@ class NegativeFeedbackNet:
         y = self.f(a)
         if self.noise is not None:
             y = y + self.noise(step, self.n_outputs, self.rng)
-        e = x - self.W.T @ y                 # feedback residual
+        y = self._apply_selection(y[None, :])[0]
+        e = x - self.W.T @ y if self.feedback else x  # feedback residual
         self.W += eta * np.outer(y, e)       # Hebbian on residual
+        if self.weight_decay:
+            self.W -= eta * self.weight_decay * self.W
         if self.nonneg_weights:
             np.maximum(self.W, 0.0, out=self.W)
         return y
@@ -95,8 +117,11 @@ class NegativeFeedbackNet:
             # Per-sample noise; injectors return one (n_outputs,) draw each call.
             Y = Y + np.array([self.noise(step, self.n_outputs, self.rng)
                               for _ in range(X.shape[0])])
-        E = X - Y @ self.W                     # (B, N)
+        Y = self._apply_selection(Y)
+        E = X - Y @ self.W if self.feedback else X  # (B, N)
         self.W += eta * (Y.T @ E) / X.shape[0]  # (M, N)
+        if self.weight_decay:
+            self.W -= eta * self.weight_decay * self.W
         if self.nonneg_weights:
             np.maximum(self.W, 0.0, out=self.W)
         return Y
