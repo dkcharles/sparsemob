@@ -52,7 +52,7 @@ square = NonLinearity(lambda a: a ** 2, "square")  # EPP skewness index (y^2)
 
 
 def soft_threshold(tau: float = 1.0, lam: float = 4.0) -> NonLinearity:
-    """Soft-threshold function  y = log(1 + exp(lam*(a - tau)))  (Ch.3.3).
+    """Soft-threshold function  y = log(1 + exp(lam*(a - tau))) / lam  (Ch.3.3).
 
     ``tau`` shifts the threshold along the activation axis; ``lam`` controls the
     gradient. Because the function has no hard cut-off, weights can grow from a

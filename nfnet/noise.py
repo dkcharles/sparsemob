@@ -156,9 +156,10 @@ class WeightRedundancyNoise:
         Wn = W / np.maximum(norms, self.eps)
         C = np.abs(Wn @ Wn.T)                        # (M, M) absolute cosine
         np.fill_diagonal(C, 0.0)
-        r = C.max(axis=1)
         inactive = norms[:, 0] < self.active_norm    # near-zero outputs are not redundant
-        r = np.where(inactive, 0.0, r)
+        C[inactive, :] = 0.0                         # inactive rows are not redundant, and
+        C[:, inactive] = 0.0                         # cannot make active outputs redundant
+        r = C.max(axis=1)
         if self.redundancy is None:
             self.redundancy = r
         else:

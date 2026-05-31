@@ -2,8 +2,9 @@
 
 The bars data (Foldiak / Rumelhart-Zipser) is the headline testbed: an NxN grid
 of independently chosen horizontal and vertical bars (thesis Ch.1.2.2). Also
-included: stereo-disparity and Minsky shape data (Ch.4.6), and a quantitative
-bar-recovery metric so experiment success is verifiable without eyeballing plots.
+included: signed (bidirectional) bars and stereo-disparity data (Ch.4.6), plus
+quantitative bar-recovery metrics so experiment success is verifiable without
+eyeballing plots.
 """
 
 from __future__ import annotations
@@ -65,28 +66,41 @@ def evaluate_bars_recovery(W: np.ndarray, size: int = 8, threshold: float = 0.9,
                            active_norm: float = 0.1):
     """Score how well weight vectors recovered the individual bars.
 
+    Active outputs are those whose *raw* weight-vector norm exceeds ``active_norm``
+    (the same definition used by :func:`nfnet.compare.active_count`), so the active
+    set is consistent across metrics. Recovery is reported two ways:
+
     Returns a dict with:
-      - recovered: how many of the 2*size bars are matched by some output
-        (max cosine similarity over the rectified, normalised weight vectors >=
-        ``threshold``)
-      - active_outputs: outputs whose weight-vector norm exceeds ``active_norm``
-      - mean_best_similarity: average best-match cosine over all bars
+      - recovered: bars matched by some active output under the positive-part
+        (rectified) cosine >= ``threshold``. This is the primary/historical metric
+        for the non-negative bar code.
+      - recovered_raw: bars matched under the raw (un-rectified) cosine >=
+        ``threshold``; stricter, since it penalises any off-bar (negative) structure.
+      - active_outputs: number of active outputs (raw norm > ``active_norm``).
+      - mean_best_similarity: average best-match positive-part cosine over all bars.
+      - mean_best_similarity_raw: average best-match raw cosine over all bars.
     """
     s = size
     templates = BarsData(size=s).bar_templates()       # (2s, N)
-    Wpos = np.maximum(W, 0.0)
-    norms = np.linalg.norm(Wpos, axis=1)
+    norms = np.linalg.norm(W, axis=1)                  # raw norm (matches compare.active_count)
     active = norms > active_norm
-    Wn = Wpos[active]
-    if Wn.shape[0] == 0:
-        return {"recovered": 0, "active_outputs": 0, "mean_best_similarity": 0.0}
-    Wn = Wn / np.linalg.norm(Wn, axis=1, keepdims=True)
-    sims = templates @ Wn.T                              # (2s, n_active)
-    best = sims.max(axis=1)
+    Wa = W[active]
+    if Wa.shape[0] == 0:
+        return {"recovered": 0, "recovered_raw": 0, "active_outputs": 0,
+                "mean_best_similarity": 0.0, "mean_best_similarity_raw": 0.0}
+    # Positive-part match: the historical protocol for the non-negative bar code.
+    Wpos = np.maximum(Wa, 0.0)
+    pos = Wpos / np.maximum(np.linalg.norm(Wpos, axis=1, keepdims=True), 1e-12)
+    best_pos = (templates @ pos.T).max(axis=1)
+    # Raw-weight match: stricter, exposes any off-bar (negative) structure.
+    raw = Wa / np.linalg.norm(Wa, axis=1, keepdims=True)
+    best_raw = (templates @ raw.T).max(axis=1)
     return {
-        "recovered": int(np.sum(best >= threshold)),
+        "recovered": int(np.sum(best_pos >= threshold)),
+        "recovered_raw": int(np.sum(best_raw >= threshold)),
         "active_outputs": int(np.sum(active)),
-        "mean_best_similarity": float(best.mean()),
+        "mean_best_similarity": float(best_pos.mean()),
+        "mean_best_similarity_raw": float(best_raw.mean()),
     }
 
 

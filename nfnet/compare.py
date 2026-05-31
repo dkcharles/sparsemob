@@ -19,7 +19,13 @@ def _unit(W):
 def matched_atom_similarity(W1: np.ndarray, W2: np.ndarray) -> float:
     """Mean |cos| of a Hungarian matching between the rows of W1 and W2.
 
-    Matches min(rows) pairs; 1.0 iff the dictionaries span the same atoms.
+    Matches min(#rows) pairs and averages over matched pairs only, so it measures
+    the quality of the matched atoms, not coverage: a small dictionary that aligns
+    well with a subset of a larger one scores high while omitting many atoms, and
+    duplicate or inactive rows further complicate interpretation. Report coverage
+    (e.g. fraction of W2 atoms matched above a threshold) alongside this value;
+    it reaches 1.0 when every matched pair is collinear, which requires equal atom
+    counts and a perfect pairing but does not by itself certify identical spans.
     """
     A, B = _unit(W1), _unit(W2)
     S = np.abs(A @ B.T)

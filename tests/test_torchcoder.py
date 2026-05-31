@@ -127,3 +127,58 @@ def test_runs_on_cuda_if_available():
     net.train(sampler, n_steps=100, batch_size=128, eta0=0.02)
     assert net.W.is_cuda
     assert torch.isfinite(net.W).all()
+
+
+def test_torch_weight_decay_is_simultaneous():
+    # delta = (Y^T E)/B - wd*W, applied as W += eta*delta (uses pre-update W).
+    torch.manual_seed(0)
+    X = torch.randn(6, 8)
+    net = TorchNegativeFeedbackCoder(8, 4, nonlinearity=lambda a: a,
+                                     weight_decay=0.2, weight_init=0.1, seed=0)
+    W0 = net.W.clone()
+    net.train_step(X, eta=0.1)
+    Y = X @ W0.t()
+    E = X - Y @ W0
+    H = (Y.t() @ E) / X.shape[0]
+    expected = W0 + 0.1 * (H - 0.2 * W0)
+    assert torch.allclose(net.W, expected, atol=1e-6)
+
+
+def test_torch_noise_is_seed_reproducible():
+    # Two coders with the same seed must inject the identical noise stream,
+    # independent of the global torch RNG state between them.
+    def make():
+        return TorchNegativeFeedbackCoder(8, 6, nonlinearity=lambda a: a,
+                                          noise=UniformNoise(0.1), weight_init=0.0,
+                                          seed=123)
+    a = make()
+    torch.manual_seed(999)               # perturb global RNG between constructions
+    _ = torch.randn(100)
+    b = make()
+    X = torch.ones(4, 8)
+    a.train_step(X, eta=0.0)             # eta=0 -> W unchanged, but noise drawn
+    b.train_step(X, eta=0.0)
+    # Draw a noise sample directly from each (generators are now in lock-step).
+    na = a.noise(torch.zeros(3, 6))
+    nb = b.noise(torch.zeros(3, 6))
+    assert torch.allclose(na, nb)
+
+
+def test_torch_noise_differs_across_seeds():
+    a = TorchNegativeFeedbackCoder(8, 6, noise=UniformNoise(0.1), seed=1)
+    b = TorchNegativeFeedbackCoder(8, 6, noise=UniformNoise(0.1), seed=2)
+    na = a.noise(torch.zeros(4, 6))
+    nb = b.noise(torch.zeros(4, 6))
+    assert not torch.allclose(na, nb)
+
+
+def test_torch_weight_redundancy_ignores_inactive_columns():
+    nz = WeightRedundancyNoise(sigma=0.1, beta=0.0, active_norm=0.1)
+    W = torch.tensor([[1.0, 0.0, 0.0],     # active
+                      [1e-3, 0.0, 0.0],    # inactive, aligned with row 0
+                      [0.0, 1.0, 0.0]])    # active, orthogonal to row 0
+    nz.observe_weights(W)
+    r = nz.redundancy
+    assert r[0].item() == 0.0   # only aligned partner is inactive
+    assert r[1].item() == 0.0   # inactive output
+    assert r[2].item() == 0.0   # orthogonal to the only other active output

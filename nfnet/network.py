@@ -51,6 +51,14 @@ class NegativeFeedbackNet:
         feedback: bool = True,
         rng: np.random.Generator | int | None = None,
     ):
+        if n_inputs <= 0 or n_outputs <= 0:
+            raise ValueError("n_inputs and n_outputs must be positive")
+        if weight_decay < 0.0:
+            raise ValueError("weight_decay must be non-negative")
+        if act_l1 < 0.0:
+            raise ValueError("act_l1 must be non-negative")
+        if topk is not None and not (0 <= topk <= n_outputs):
+            raise ValueError("topk must be between 0 and n_outputs (inclusive)")
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self.f = nonlinearity
@@ -74,10 +82,13 @@ class NegativeFeedbackNet:
         if self.act_l1:
             Y = np.sign(Y) * np.maximum(np.abs(Y) - self.act_l1, 0.0)
         if self.topk is not None and self.topk < self.n_outputs:
-            keep = np.argsort(np.abs(Y), axis=1)[:, -self.topk:]
-            mask = np.zeros_like(Y, dtype=bool)
-            np.put_along_axis(mask, keep, True, axis=1)
-            Y = np.where(mask, Y, 0.0)
+            if self.topk <= 0:
+                Y = np.zeros_like(Y)
+            else:
+                keep = np.argsort(np.abs(Y), axis=1)[:, -self.topk:]
+                mask = np.zeros_like(Y, dtype=bool)
+                np.put_along_axis(mask, keep, True, axis=1)
+                Y = np.where(mask, Y, 0.0)
         return Y
 
     def forward(self, x: np.ndarray, add_noise: bool = False, step: int = 0):
@@ -86,18 +97,24 @@ class NegativeFeedbackNet:
         y = self.f(a)
         if add_noise and self.noise is not None:
             y = y + self.noise(step, self.n_outputs, self.rng)
+        y = self._apply_selection(y[None, :])[0]
         return a, y
 
     def train_step(self, x: np.ndarray, eta: float, step: int = 0) -> np.ndarray:
         a = self.W @ x
         y = self.f(a)
         if self.noise is not None:
+            if hasattr(self.noise, "observe"):
+                self.noise.observe(y)
+            if hasattr(self.noise, "observe_weights"):
+                self.noise.observe_weights(self.W)
             y = y + self.noise(step, self.n_outputs, self.rng)
         y = self._apply_selection(y[None, :])[0]
         e = x - self.W.T @ y if self.feedback else x  # feedback residual
-        self.W += eta * np.outer(y, e)       # Hebbian on residual
+        delta = np.outer(y, e)               # Hebbian on residual
         if self.weight_decay:
-            self.W -= eta * self.weight_decay * self.W
+            delta = delta - self.weight_decay * self.W   # simultaneous L2 decay
+        self.W += eta * delta
         if self.nonneg_weights:
             np.maximum(self.W, 0.0, out=self.W)
         return y
@@ -119,9 +136,10 @@ class NegativeFeedbackNet:
                               for _ in range(X.shape[0])])
         Y = self._apply_selection(Y)
         E = X - Y @ self.W if self.feedback else X  # (B, N)
-        self.W += eta * (Y.T @ E) / X.shape[0]  # (M, N)
+        delta = (Y.T @ E) / X.shape[0]          # (M, N)
         if self.weight_decay:
-            self.W -= eta * self.weight_decay * self.W
+            delta = delta - self.weight_decay * self.W   # simultaneous L2 decay
+        self.W += eta * delta
         if self.nonneg_weights:
             np.maximum(self.W, 0.0, out=self.W)
         return Y

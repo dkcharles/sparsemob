@@ -4,6 +4,20 @@ Mirrors nfnet.synth.SyntheticFeatureData but produces activation batches directl
 torch device, so the d=768 / 16,384-feature regime is feasible on a GPU. Same design:
 random unit-vector dictionary, Zipfian firing, folded-normal magnitudes, with optional
 grouped correlation and parent-gated hierarchy.
+
+Note on default parameters: this scaled generator defaults to a sparser, larger-structure
+regime than the CPU generator because it runs ~32x more features, so it is a benchmark-scale
+stress test rather than a literal scale-up. The differing defaults are:
+
+    parameter   CPU (nfnet.synth)   GPU (this module)
+    n_features  512                 16,384
+    p_min       1e-3                1e-4
+    p_max       0.2                 0.1
+    n_groups    16                  256
+    branching   4                   8
+
+All are constructor arguments, so either regime can be reproduced on either backend by
+passing matching values; the runner logs them per trial.
 """
 
 from __future__ import annotations

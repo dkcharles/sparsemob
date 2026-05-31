@@ -2,7 +2,7 @@
 
 The signature result. With 24 outputs but only 16 causes, the plain network
 shares partial bars across outputs. Adding uniform zero-mean Gaussian noise
-(sigma=0.01) on the outputs after the non-linearity makes the network settle on
+(sigma=0.1) on the outputs after the non-linearity makes the network settle on
 exactly 16 active outputs -- each a whole bar -- while the other 8 weight vectors
 decay to zero (Fig.27a). This reproduces the MOB claim.
 

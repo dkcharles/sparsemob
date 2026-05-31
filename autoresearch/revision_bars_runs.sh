@@ -4,8 +4,8 @@
 #   Task 12 (A2):  noise-floor sweep at 20 seeds for a usable CI on the sharp floor
 #   Task 11 (A1c): L1 and top-k width-control baselines on bars
 # All append to autoresearch/ledger/experiments.jsonl.
-set -e
-PY=python
+set -euo pipefail
+PY="${PY:-python}"
 
 echo "=== Task 10: A1b no-feedback noise sweep (bars) ==="
 for s in 0.0 0.1 0.2 0.3 0.4; do

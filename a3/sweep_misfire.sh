@@ -10,8 +10,8 @@
 # collapse cliff at sigma~0.4). The misfire signature is: activation-redundancy drops
 # notably more active outputs / recovers fewer features under correlation than
 # independent, while weight-redundancy is roughly unchanged. Appends to ledger_a3.jsonl.
-set -e
-PY=.venv-a3/Scripts/python.exe
+set -euo pipefail
+PY="${PY:-.venv-a3/Scripts/python.exe}"
 for mode in redundancy weight_redundancy; do
   for corr in 0.0 0.8; do
     "$PY" -m a3.run_synth --noise-mode "$mode" --sigma 0.2 \

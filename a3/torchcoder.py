@@ -17,6 +17,14 @@ import math
 import torch
 
 
+def _randn(Y: torch.Tensor, generator=None) -> torch.Tensor:
+    """Standard-normal tensor shaped like Y, drawn from ``generator`` if provided.
+
+    Using an explicit generator makes the injected noise reproducible from the trial
+    seed rather than dependent on the global Torch RNG state / execution order."""
+    return torch.randn(Y.shape, generator=generator, device=Y.device, dtype=Y.dtype)
+
+
 # --------------------------------------------------------------------------- #
 # Non-linearities (element-wise), matching nfnet.nonlinearities                #
 # --------------------------------------------------------------------------- #
@@ -41,11 +49,12 @@ def soft_shrink(tau: float = 1.0, lam: float = 4.0):
 class UniformNoise:
     name = "uniform"
 
-    def __init__(self, sigma: float = 0.1):
+    def __init__(self, sigma: float = 0.1, generator=None):
         self.sigma = sigma
+        self.generator = generator
 
     def __call__(self, Y: torch.Tensor) -> torch.Tensor:
-        return torch.randn_like(Y) * self.sigma
+        return _randn(Y, self.generator) * self.sigma
 
 
 class AdaptiveNoise:
@@ -53,10 +62,12 @@ class AdaptiveNoise:
 
     name = "adaptive"
 
-    def __init__(self, sigma: float = 0.1, beta: float = 0.99, eps: float = 1e-8):
+    def __init__(self, sigma: float = 0.1, beta: float = 0.99, eps: float = 1e-8,
+                 generator=None):
         self.sigma = sigma
         self.beta = beta
         self.eps = eps
+        self.generator = generator
         self.activity: torch.Tensor | None = None
 
     def observe(self, Y: torch.Tensor) -> None:
@@ -68,9 +79,9 @@ class AdaptiveNoise:
 
     def __call__(self, Y: torch.Tensor) -> torch.Tensor:
         if self.activity is None:
-            return torch.randn_like(Y) * self.sigma
+            return _randn(Y, self.generator) * self.sigma
         scale = torch.sqrt((self.activity + self.eps) / (self.activity.mean() + self.eps))
-        return torch.randn_like(Y) * (self.sigma * scale)
+        return _randn(Y, self.generator) * (self.sigma * scale)
 
 
 class RedundancyNoise:
@@ -78,10 +89,12 @@ class RedundancyNoise:
 
     name = "redundancy"
 
-    def __init__(self, sigma: float = 0.1, beta: float = 0.9, eps: float = 1e-8):
+    def __init__(self, sigma: float = 0.1, beta: float = 0.9, eps: float = 1e-8,
+                 generator=None):
         self.sigma = sigma
         self.beta = beta
         self.eps = eps
+        self.generator = generator
         self.redundancy: torch.Tensor | None = None
 
     def observe(self, Y: torch.Tensor) -> None:
@@ -101,8 +114,8 @@ class RedundancyNoise:
 
     def __call__(self, Y: torch.Tensor) -> torch.Tensor:
         if self.redundancy is None:
-            return torch.randn_like(Y) * self.sigma
-        return torch.randn_like(Y) * (self.sigma * self.redundancy)
+            return _randn(Y, self.generator) * self.sigma
+        return _randn(Y, self.generator) * (self.sigma * self.redundancy)
 
 
 class WeightRedundancyNoise:
@@ -111,11 +124,12 @@ class WeightRedundancyNoise:
     name = "weight_redundancy"
 
     def __init__(self, sigma: float = 0.1, beta: float = 0.9, eps: float = 1e-8,
-                 active_norm: float = 0.1):
+                 active_norm: float = 0.1, generator=None):
         self.sigma = sigma
         self.beta = beta
         self.eps = eps
         self.active_norm = active_norm
+        self.generator = generator
         self.redundancy: torch.Tensor | None = None
 
     def observe_weights(self, W: torch.Tensor) -> None:
@@ -123,9 +137,10 @@ class WeightRedundancyNoise:
         Wn = W / norms.clamp_min(self.eps)
         C = (Wn @ Wn.t()).abs()
         C.fill_diagonal_(0.0)
-        r = C.max(dim=1).values
         inactive = norms.squeeze(1) < self.active_norm
-        r = torch.where(inactive, torch.zeros_like(r), r)
+        C[inactive, :] = 0.0                         # inactive rows are not redundant, and
+        C[:, inactive] = 0.0                         # cannot make active outputs redundant
+        r = C.max(dim=1).values
         if self.redundancy is None:
             self.redundancy = r
         else:
@@ -133,8 +148,8 @@ class WeightRedundancyNoise:
 
     def __call__(self, Y: torch.Tensor) -> torch.Tensor:
         if self.redundancy is None:
-            return torch.randn_like(Y) * self.sigma
-        return torch.randn_like(Y) * (self.sigma * self.redundancy)
+            return _randn(Y, self.generator) * self.sigma
+        return _randn(Y, self.generator) * (self.sigma * self.redundancy)
 
 
 # --------------------------------------------------------------------------- #
@@ -155,6 +170,13 @@ class TorchNegativeFeedbackCoder:
             g.manual_seed(seed)
         self._gen = g
         self.W = (torch.rand(n_outputs, n_inputs, generator=g, device=self.device) * 2 - 1) * weight_init
+        # Give the noise its own seeded stream (independent of weight init), so injected
+        # noise is reproducible from the trial seed rather than the global RNG state.
+        if self.noise is not None and getattr(self.noise, "generator", None) is None:
+            ng = torch.Generator(device=self.device)
+            if seed is not None:
+                ng.manual_seed(seed + 10_007)
+            self.noise.generator = ng
 
     def train_step(self, X: torch.Tensor, eta: float) -> torch.Tensor:
         A = X @ self.W.t()
@@ -166,9 +188,10 @@ class TorchNegativeFeedbackCoder:
                 self.noise.observe_weights(self.W)
             Y = Y + self.noise(Y)
         E = X - Y @ self.W
-        self.W += eta * (Y.t() @ E) / X.shape[0]
+        delta = (Y.t() @ E) / X.shape[0]
         if self.weight_decay:
-            self.W -= eta * self.weight_decay * self.W
+            delta = delta - self.weight_decay * self.W   # simultaneous L2 decay
+        self.W += eta * delta
         return Y
 
     def train(self, sampler_batch, n_steps: int, batch_size: int, eta0: float = 0.05):
